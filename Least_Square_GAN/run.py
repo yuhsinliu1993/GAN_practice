@@ -6,7 +6,7 @@ from tensorflow.examples.tutorials.mnist import input_data
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-from model import VanillaGAN
+from model import LSGAN
 from utils import sample_uniform
 
 
@@ -36,7 +36,7 @@ def plot(samples):
     return fig
 
 
-def train(image_size, z_dim, batch_size, num_iterations, learning_rate, print_every=1000):
+def train(image_size, z_dim, batch_size, num_iterations, learning_rate, d_step=3, print_every=1000):
     # Load data
     mnist = input_data.read_data_sets('../data/MNIST_data', one_hot=True)
 
@@ -45,7 +45,7 @@ def train(image_size, z_dim, batch_size, num_iterations, learning_rate, print_ev
 
         with sess.as_default():
             # Build model
-            model = VanillaGAN(image_size, z_dim, learning_rate)
+            model = LSGAN(image_size, z_dim, learning_rate)
             model.build()
 
             sess.run(tf.global_variables_initializer())
@@ -57,17 +57,14 @@ def train(image_size, z_dim, batch_size, num_iterations, learning_rate, print_ev
             g_losses = []
             i = 0
             for it in range(num_iterations):
-                if it % print_every == 0:
-                    fake_samples = sess.run(model.fake_samples, feed_dict={model.Z: sample_uniform(16, z_dim)})
 
-                    fig = plot(fake_samples)
-                    plt.savefig('out/{}.png'.format(str(i).zfill(3)), bbox_inches='tight')
-                    i += 1
-                    plt.close(fig)
+                # Train Discriminator 3 times before training Generator
+                for _ in range(d_step):
+                    X_batch, _ = mnist.train.next_batch(batch_size)
+                    _, d_loss = sess.run([model.d_solver, model.d_loss],
+                                         feed_dict={model.X: X_batch, model.Z: sample_uniform(batch_size, z_dim)})
 
                 X_batch, _ = mnist.train.next_batch(batch_size)
-
-                _, d_loss = sess.run([model.d_solver, model.d_loss], feed_dict={model.X: X_batch, model.Z: sample_uniform(batch_size, z_dim)})
                 _, g_loss = sess.run([model.g_solver, model.g_loss], feed_dict={model.Z: sample_uniform(batch_size, z_dim)})
 
                 d_losses.append(d_loss)
@@ -76,6 +73,13 @@ def train(image_size, z_dim, batch_size, num_iterations, learning_rate, print_ev
                 if it % print_every == 0:
                     print('Iter: {}'.format(it))
                     print('Discriminator Loss: {:.4}\tGenerator Loss: {:.4}\n'.format(d_loss, g_loss))
+
+                    fake_samples = sess.run(model.fake_samples, feed_dict={model.Z: sample_uniform(16, z_dim)})
+
+                    fig = plot(fake_samples)
+                    plt.savefig('out/{}.png'.format(str(i).zfill(3)), bbox_inches='tight')
+                    i += 1
+                    plt.close(fig)
 
             plot_loss(it, d_losses, g_losses)
 
@@ -105,7 +109,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--learning_rate',
         type=float,
-        default=5e-4,
+        default=1e-3,
         help='Specify learning rate'
     )
     parser.add_argument(

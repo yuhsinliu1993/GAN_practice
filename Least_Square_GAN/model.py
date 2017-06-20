@@ -3,7 +3,7 @@ import tensorflow as tf
 from initializer import xavier_init
 
 
-class VanillaGAN:
+class LSGAN:
 
     def __init__(self, input_dim, z_dim, learning_rate):
         self.input_dim = input_dim
@@ -48,11 +48,8 @@ class VanillaGAN:
         D_logit_real = self.discriminator(self.X)
         D_logit_fake = self.discriminator(self.fake_samples)
 
-        D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_real, labels=tf.ones_like(D_logit_real)))
-        D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake, labels=tf.zeros_like(D_logit_fake)))
-
-        self.d_loss = D_loss_real + D_loss_fake
-        self.g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake, labels=tf.ones_like(D_logit_fake)))
+        self.d_loss = 0.5 * tf.reduce_mean((D_logit_real - 1)**2 + D_logit_fake**2)
+        self.g_loss = 0.5 * tf.reduce_mean((D_logit_fake - 1)**2)
 
     def _build_ops(self):
         self.d_solver = tf.train.AdamOptimizer(self.learning_rate).minimize(self.d_loss, var_list=[self.D_W1, self.D_b1, self.D_W2, self.D_b2])
