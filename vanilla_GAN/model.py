@@ -11,7 +11,7 @@ class VanillaGAN:
         self.learning_rate = learning_rate
 
         self.X = tf.placeholder(tf.float32, shape=[None, input_dim])
-        self.Z = tf.placeholder(tf.float32, shape=[None, z_dim])
+        self.z = tf.placeholder(tf.float32, shape=[None, z_dim])
 
     def build(self):
         # Training variables for Discriminator
@@ -26,9 +26,11 @@ class VanillaGAN:
         self.G_W2 = tf.Variable(xavier_init([128, self.input_dim]))
         self.G_b2 = tf.Variable(tf.zeros(shape=[self.input_dim]))
 
-        self.fake_samples = self.generator(self.Z)
+        self.G_samples = self.generator(self.z)
+        D_logit_real = self.discriminator(self.X)
+        D_logit_fake = self.discriminator(self.G_samples)
 
-        self._loss()
+        self._loss(D_logit_real, D_logit_fake)
         self._build_ops()
 
     def generator(self, z):
@@ -44,15 +46,12 @@ class VanillaGAN:
 
         return D_logit
 
-    def _loss(self):
-        D_logit_real = self.discriminator(self.X)
-        D_logit_fake = self.discriminator(self.fake_samples)
+    def _loss(self, real, fake):
+        loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=real, labels=tf.ones_like(real)))
+        loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake, labels=tf.zeros_like(fake)))
 
-        D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_real, labels=tf.ones_like(D_logit_real)))
-        D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake, labels=tf.zeros_like(D_logit_fake)))
-
-        self.d_loss = D_loss_real + D_loss_fake
-        self.g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake, labels=tf.ones_like(D_logit_fake)))
+        self.d_loss = loss_real + loss_fake
+        self.g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake, labels=tf.ones_like(fake)))
 
     def _build_ops(self):
         self.d_solver = tf.train.AdamOptimizer(self.learning_rate).minimize(self.d_loss, var_list=[self.D_W1, self.D_b1, self.D_W2, self.D_b2])

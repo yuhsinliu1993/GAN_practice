@@ -1,12 +1,13 @@
 import os
 import argparse
 import sys
+import numpy as np
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-from model import VanillaGAN
+from model import InfoGAN
 from utils import sample_uniform
 
 
@@ -36,7 +37,7 @@ def plot(samples):
     return fig
 
 
-def train(image_size, z_dim, batch_size, num_iterations, learning_rate, print_every=1000):
+def train(image_size, z_dim, c_dim, hidden_dim, batch_size, num_iterations, learning_rate, print_every=1000):
     # Load data
     mnist = input_data.read_data_sets('../data/MNIST_data', one_hot=True)
 
@@ -45,7 +46,7 @@ def train(image_size, z_dim, batch_size, num_iterations, learning_rate, print_ev
 
         with sess.as_default():
             # Build model
-            model = VanillaGAN(image_size, z_dim, learning_rate)
+            model = InfoGAN(image_size, z_dim, c_dim, hidden_dim, learning_rate)
             model.build()
 
             sess.run(tf.global_variables_initializer())
@@ -59,7 +60,13 @@ def train(image_size, z_dim, batch_size, num_iterations, learning_rate, print_ev
             for it in range(num_iterations):
                 if it % print_every == 0:
                     z_noise = sample_uniform(16, z_dim)
-                    G_samples = sess.run(model.G_samples, feed_dict={model.z: z_noise})
+
+                    idx = np.random.randint(0, 10)
+                    c_noise = np.zeros([16, 10])
+                    c_noise[range(16), idx] = 1
+
+                    G_samples = sess.run(model.G_samples,
+                                         feed_dict={model.z: z_noise, model.c: c_noise})
 
                     fig = plot(G_samples)
                     plt.savefig('out/{}.png'.format(str(i).zfill(3)), bbox_inches='tight')
@@ -67,9 +74,14 @@ def train(image_size, z_dim, batch_size, num_iterations, learning_rate, print_ev
                     plt.close(fig)
 
                 X_batch, _ = mnist.train.next_batch(batch_size)
+                z_noise = sample_uniform(batch_size, z_dim)
+                c_noise = np.random.multinomial(1, 10 * [0.1], size=batch_size)
 
-                _, d_loss = sess.run([model.d_solver, model.d_loss], feed_dict={model.X: X_batch, model.z: sample_uniform(batch_size, z_dim)})
-                _, g_loss = sess.run([model.g_solver, model.g_loss], feed_dict={model.z: sample_uniform(batch_size, z_dim)})
+                _, d_loss = sess.run([model.d_solver, model.d_loss],
+                                     feed_dict={model.X: X_batch, model.z: z_noise, model.c: c_noise})
+                _, g_loss = sess.run([model.g_solver, model.g_loss],
+                                     feed_dict={model.z: z_noise, model.c: c_noise})
+                sess.run([model.Q_solver], feed_dict={model.z: z_noise, model.c: c_noise})
 
                 d_losses.append(d_loss)
                 g_losses.append(g_loss)
@@ -84,7 +96,7 @@ def train(image_size, z_dim, batch_size, num_iterations, learning_rate, print_ev
 def run(_):
     if FLAGS.mode == 'train':
         image_size = 28 * 28 * 1
-        train(image_size, FLAGS.Z_dim, FLAGS.batch_size, FLAGS.num_iterations, FLAGS.learning_rate)
+        train(image_size, FLAGS.z_dim, FLAGS.c_dim, FLAGS.hidden_dim, FLAGS.batch_size, FLAGS.num_iterations, FLAGS.learning_rate)
     else:
         pass
 
@@ -94,14 +106,26 @@ if __name__ == '__main__':
     parser.add_argument(
         '--batch_size',
         type=int,
-        default=128,
+        default=32,
         help='Batch size. Must divide evenly into the dataset sizes.'
     )
     parser.add_argument(
-        '--Z_dim',
+        '--z_dim',
         type=int,
-        default=100,
-        help='Specify the dimension of Z.'
+        default=16,
+        help='Specify the dimension of z.'
+    )
+    parser.add_argument(
+        '--c_dim',
+        type=int,
+        default=10,
+        help='Specify the dimension of c.'
+    )
+    parser.add_argument(
+        '--hidden_dim',
+        type=int,
+        default=128,
+        help='Specify the dimension of hidden layer.'
     )
     parser.add_argument(
         '--learning_rate',

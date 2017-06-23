@@ -26,7 +26,11 @@ class LSGAN:
         self.G_W2 = tf.Variable(xavier_init([128, self.input_dim]))
         self.G_b2 = tf.Variable(tf.zeros(shape=[self.input_dim]))
 
-        self.fake_samples = self.generator(self.Z)
+        self.G_samples = self.generator(self.Z)
+        D_logit_real = self.discriminator(self.X)
+        D_logit_fake = self.discriminator(self.G_samples)
+
+        self._loss(D_logit_real, D_logit_fake)
 
         self._loss()
         self._build_ops()
@@ -44,12 +48,9 @@ class LSGAN:
 
         return D_logit
 
-    def _loss(self):
-        D_logit_real = self.discriminator(self.X)
-        D_logit_fake = self.discriminator(self.fake_samples)
-
-        self.d_loss = 0.5 * tf.reduce_mean((D_logit_real - 1)**2 + D_logit_fake**2)
-        self.g_loss = 0.5 * tf.reduce_mean((D_logit_fake - 1)**2)
+    def _loss(self, real, fake):
+        self.d_loss = 0.5 * tf.reduce_mean((real - 1)**2 + fake**2)
+        self.g_loss = 0.5 * tf.reduce_mean((fake - 1)**2)
 
     def _build_ops(self):
         self.d_solver = tf.train.AdamOptimizer(self.learning_rate).minimize(self.d_loss, var_list=[self.D_W1, self.D_b1, self.D_W2, self.D_b2])
